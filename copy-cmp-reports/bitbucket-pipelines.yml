@@ -1,0 +1,224 @@
+# enable Docker for your repository
+definitions:
+  steps:
+    - step: &build-check
+        name: Build Check Before Merging
+        caches:
+          - docker
+        deployment: Dev
+        script:
+          # set image name
+          - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
+          - export IMAGE_NAME=cmp-reports:${SHORT_SHA}
+          - echo $IMAGE_NAME
+
+          # Build & push docker image
+          - docker build -t $IMAGE_NAME .
+          # :-)
+          - echo "${BITBUCKET_BRANCH}-cmp-reports Build Passed Successfully"
+
+    - step: &dev-build
+        name: Build - Push - Deploy to Cloud Run
+        image: google/cloud-sdk:latest
+        caches:
+          - docker
+        deployment: Dev
+        script:
+          - apt-get install jq -y
+          - echo ${KEY_FILE_AUTH} > /tmp/gcloud-api.json
+          - export SERVICE_ACCOUNT_EMAIL=$(jq '.client_email' /tmp/gcloud-api.json -r)
+          - export PROJECT_ID=$(jq '.project_id' /tmp/gcloud-api.json -r)
+          - echo "${PROJECT_ID} - ${SERVICE_ACCOUNT_EMAIL}"
+
+          # set image name
+          - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
+          - export IMAGE_NAME=gcr.io/${PROJECT_ID}/${BITBUCKET_BRANCH}-cmp-reports:${SHORT_SHA}
+          - echo $IMAGE_NAME
+
+          # Gcloud auth and check
+          - gcloud auth activate-service-account --key-file=/tmp/gcloud-api.json
+          - gcloud config set project $PROJECT_ID
+
+          # Build & push docker image
+          - docker build -t $IMAGE_NAME .
+          - gcloud auth configure-docker -q
+          - docker push $IMAGE_NAME
+
+          # Deploy to cloud run
+          - |
+            gcloud run deploy ${BITBUCKET_BRANCH}-cmp-reports \
+            --service-account ${SERVICE_ACCOUNT_EMAIL} \
+            --image $IMAGE_NAME \
+            --region europe-west1 \
+            --project $PROJECT_ID \
+            --platform managed \
+            --vpc-connector clearvue-vpc \
+            --memory 512Mi \
+            --set-env-vars=HOST=0.0.0.0 \
+            --set-env-vars=NODE_ENV=development \
+            --set-env-vars=DRIVE_DISK=local \
+            --set-env-vars=CLICKHOUSE_T05_HOST=10.154.0.16 \
+            --set-env-vars=CLICKHOUSE_T05_PORT=9030 \
+            --set-env-vars=CLICKHOUSE_T05_USER=ch_readonly_user \
+            --set-env-vars=CLICKHOUSE_T05_NGP_TABLE=t05_ngp_cluster_c_and_c \
+            --set-env-vars=CLICKHOUSE_T05_DB=electrical_params_05 \
+            --set-env-vars=CLICKHOUSE_T05_TABLE=t05_cluster_c_and_c \
+            --set-env-vars=DB_CONNECTION=pg \
+            --set-env-vars=PG_HOST=10.66.240.34 \
+            --set-env-vars=PG_PORT=5432 \
+            --set-env-vars=PG_USER=cmpreports \
+            --set-env-vars=PG_DB_NAME=cmp_reports_dev \
+            --set-env-vars=CMP_BO_URL=https://dev-cmp-business-1xhp7nh4.nw.gateway.dev/cmp-bo/api \
+            --set-env-vars=MISSING_ALERT_SLACK_CHANNEL=t05-streaming-data-alert \
+            --set-env-vars=MAILGUN_DOMAIN=support.clearvuesystems.com \
+            --set-env-vars=MAILGUN_HOST=https://api.eu.mailgun.net \
+            --set-secrets=APP_KEY=DEV_CMP_REPORTS_APP_KEY:latest \
+            --set-secrets=CLICKHOUSE_T05_PASSWORD=DEV_CMP_REPORTS_CLICKHOUSE_T05_PASSWORD:latest \
+            --set-secrets=PG_PASSWORD=DEV_CMP_REPORTS_PG_PASSWORD:latest \
+            --set-secrets=MAILGUN_API_KEY=DEV_CMP_REPORTS_MAILGUN_API_KEY:latest \
+            --set-secrets=SLACK_BOT_TOKEN=DEV_CMP_REPORTS_SLACK_BOT_TOKEN:latest
+
+          # :-)
+          - echo "Deployed ${BITBUCKET_BRANCH}-cmp-reports Successfully"
+
+    - step: &stage-build
+        name: Build - Push - Deploy to Cloud Run
+        image: google/cloud-sdk:latest
+        caches:
+          - docker
+        deployment: Dev
+        script:
+          - apt-get install jq -y
+          - echo ${KEY_FILE_AUTH} > /tmp/gcloud-api.json
+          - export SERVICE_ACCOUNT_EMAIL=$(jq '.client_email' /tmp/gcloud-api.json -r)
+          - export PROJECT_ID=$(jq '.project_id' /tmp/gcloud-api.json -r)
+          - echo "${PROJECT_ID} - ${SERVICE_ACCOUNT_EMAIL}"
+
+          # set image name
+          - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
+          - export IMAGE_NAME=gcr.io/${PROJECT_ID}/${BITBUCKET_BRANCH}-cmp-reports:${SHORT_SHA}
+          - echo $IMAGE_NAME
+
+          # Gcloud auth and check
+          - gcloud auth activate-service-account --key-file=/tmp/gcloud-api.json
+          - gcloud config set project $PROJECT_ID
+
+          # Build & push docker image
+          - docker build -t $IMAGE_NAME .
+          - gcloud auth configure-docker -q
+          - docker push $IMAGE_NAME
+
+          # Deploy to cloud run
+          - |
+            gcloud run deploy ${BITBUCKET_BRANCH}-cmp-reports \
+            --service-account ${SERVICE_ACCOUNT_EMAIL} \
+            --image $IMAGE_NAME \
+            --region europe-west1 \
+            --project $PROJECT_ID \
+            --platform managed \
+            --vpc-connector clearvue-vpc \
+            --memory 512Mi \
+            --set-env-vars=HOST=0.0.0.0 \
+            --set-env-vars=NODE_ENV=development \
+            --set-env-vars=DRIVE_DISK=local \
+            --set-env-vars=CLICKHOUSE_T05_HOST=10.154.0.16 \
+            --set-env-vars=CLICKHOUSE_T05_PORT=9030 \
+            --set-env-vars=CLICKHOUSE_T05_USER=ch_readonly_user \
+            --set-env-vars=CLICKHOUSE_T05_NGP_TABLE=t05_ngp_cluster_c_and_c \
+            --set-env-vars=CLICKHOUSE_T05_DB=electrical_params_05 \
+            --set-env-vars=CLICKHOUSE_T05_TABLE=t05_cluster_c_and_c \
+            --set-env-vars=DB_CONNECTION=pg \
+            --set-env-vars=PG_HOST=10.66.240.34 \
+            --set-env-vars=PG_PORT=5432 \
+            --set-env-vars=PG_USER=cmpreports \
+            --set-env-vars=PG_DB_NAME=cmp_reports_stage \
+            --set-env-vars=CMP_BO_URL=https://stage-cmp-business-1xhp7nh4.nw.gateway.dev/cmp-bo/api \
+            --set-env-vars=MISSING_ALERT_SLACK_CHANNEL=t05-streaming-data-alert \
+            --set-env-vars=MAILGUN_DOMAIN=support.clearvuesystems.com \
+            --set-env-vars=MAILGUN_HOST=https://api.eu.mailgun.net \
+            --set-secrets=APP_KEY=DEV_CMP_REPORTS_APP_KEY:latest \
+            --set-secrets=CLICKHOUSE_T05_PASSWORD=DEV_CMP_REPORTS_CLICKHOUSE_T05_PASSWORD:latest \
+            --set-secrets=PG_PASSWORD=DEV_CMP_REPORTS_PG_PASSWORD:latest \
+            --set-secrets=MAILGUN_API_KEY=DEV_CMP_REPORTS_MAILGUN_API_KEY:latest \
+            --set-secrets=SLACK_BOT_TOKEN=DEV_CMP_REPORTS_SLACK_BOT_TOKEN:latest
+
+          # :-)
+          - echo "Deployed ${BITBUCKET_BRANCH}-cmp-reports Successfully"
+
+    - step: &preprod-build
+        name: Build - Push - Deploy to Cloud Run
+        image: google/cloud-sdk:latest
+        caches:
+          - docker
+        deployment: Dev
+        script:
+          - apt-get install jq -y
+          - echo ${KEY_FILE_AUTH} > /tmp/gcloud-api.json
+          - export SERVICE_ACCOUNT_EMAIL=$(jq '.client_email' /tmp/gcloud-api.json -r)
+          - export PROJECT_ID=$(jq '.project_id' /tmp/gcloud-api.json -r)
+          - echo "${PROJECT_ID} - ${SERVICE_ACCOUNT_EMAIL}"
+
+          # set image name
+          - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
+          - export IMAGE_NAME=gcr.io/${PROJECT_ID}/${BITBUCKET_BRANCH}-cmp-reports:${SHORT_SHA}
+          - echo $IMAGE_NAME
+
+          # Gcloud auth and check
+          - gcloud auth activate-service-account --key-file=/tmp/gcloud-api.json
+          - gcloud config set project $PROJECT_ID
+
+          # Build & push docker image
+          - docker build -t $IMAGE_NAME .
+          - gcloud auth configure-docker -q
+          - docker push $IMAGE_NAME
+
+          # Deploy to cloud run
+          - |
+            gcloud run deploy ${BITBUCKET_BRANCH}-cmp-reports \
+            --service-account ${SERVICE_ACCOUNT_EMAIL} \
+            --image $IMAGE_NAME \
+            --region europe-west1 \
+            --project $PROJECT_ID \
+            --platform managed \
+            --vpc-connector clearvue-vpc \
+            --memory 512Mi \
+            --set-env-vars=HOST=0.0.0.0 \
+            --set-env-vars=NODE_ENV=development \
+            --set-env-vars=DRIVE_DISK=local \
+            --set-env-vars=CLICKHOUSE_T05_HOST=10.154.0.16 \
+            --set-env-vars=CLICKHOUSE_T05_PORT=9030 \
+            --set-env-vars=CLICKHOUSE_T05_USER=ch_readonly_user \
+            --set-env-vars=CLICKHOUSE_T05_NGP_TABLE=t05_ngp_cluster_c_and_c \
+            --set-env-vars=CLICKHOUSE_T05_DB=electrical_params_05 \
+            --set-env-vars=CLICKHOUSE_T05_TABLE=t05_cluster_c_and_c \
+            --set-env-vars=DB_CONNECTION=pg \
+            --set-env-vars=PG_HOST=10.66.240.34 \
+            --set-env-vars=PG_PORT=5432 \
+            --set-env-vars=PG_USER=cmpreports \
+            --set-env-vars=PG_DB_NAME=cmp_reports_preprod \
+            --set-env-vars=CMP_BO_URL=https://preprod-cmp-business-1xhp7nh4.nw.gateway.dev/cmp-bo/api \
+            --set-env-vars=MISSING_ALERT_SLACK_CHANNEL=t05-streaming-data-alert \
+            --set-env-vars=MAILGUN_DOMAIN=support.clearvuesystems.com \
+            --set-env-vars=MAILGUN_HOST=https://api.eu.mailgun.net \
+            --set-secrets=APP_KEY=DEV_CMP_REPORTS_APP_KEY:latest \
+            --set-secrets=CLICKHOUSE_T05_PASSWORD=DEV_CMP_REPORTS_CLICKHOUSE_T05_PASSWORD:latest \
+            --set-secrets=PG_PASSWORD=DEV_CMP_REPORTS_PG_PASSWORD:latest \
+            --set-secrets=MAILGUN_API_KEY=DEV_CMP_REPORTS_MAILGUN_API_KEY:latest \
+            --set-secrets=SLACK_BOT_TOKEN=DEV_CMP_REPORTS_SLACK_BOT_TOKEN:latest
+
+          # :-)
+          - echo "Deployed ${BITBUCKET_BRANCH}-cmp-reports Successfully"
+options:
+  docker: true
+
+pipelines:
+  branches:
+    dev:
+      - step: *dev-build
+    stage:
+      - step: *stage-build
+    preprod:
+      - step: *preprod-build
+  pull-requests:
+    '**':
+      - step: *build-check

@@ -1,0 +1,19 @@
+import { schema, rules } from '@ioc:Adonis/Core/Validator'
+import type { HttpContextContract } from '@ioc:Adonis/Core/HttpContext'
+
+export default class MissingPdfReportValidator {
+  constructor(protected ctx: HttpContextContract) {}
+
+  public schema = schema.create({
+    circuitIds: schema.array.optional().members(schema.number([rules.unsigned()])),
+    meterIds: schema.array.optional().members(schema.number([rules.unsigned()])),
+    siteIds: schema.array.optional().members(schema.number([rules.unsigned()])),
+    customerIds: schema.array.optional().members(schema.number([rules.unsigned()])),
+    emailFlag: schema.boolean.optional(),
+    recipientsTo: schema.array.optional().members(schema.string([rules.email()])),
+    recipientsCC: schema.array.optional().members(schema.string([rules.email()])),
+    recipientsBCC: schema.array.optional().members(schema.string([rules.email()])),
+  })
+
+  public messages = {}
+}
